@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Gammagoblin // Encrypted Node">
+    <title>GAMMAGOBLIN</title>
+    <style>
+        /* --- FONTS & BASICS --- */
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            /* Toxic Green Palette */
+            --term-green: #00ff41;
+            --term-dim: #008f11;
+            --term-glow: #00ff4180;
+            --err-red: #ff3333;
+            --bg-color: #020402;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            background-color: var(--bg-color);
+            color: var(--term-green);
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            height: 100vh;
+            overflow: hidden;
+            text-shadow: 0 0 4px var(--term-glow);
+            selection-background-color: var(--term-green);
+            selection-color: var(--bg-color);
+        }
+
+        /* --- LAYOUT --- */
+        #terminal {
+            max-width: 900px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 2;
+        }
+
+        a {
+            color: var(--term-green);
+            text-decoration: none;
+            border-bottom: 1px dotted var(--term-green);
+            transition: all 0.2s;
+        }
+        a:hover {
+            background-color: var(--term-green);
+            color: var(--bg-color);
+            text-shadow: none;
+            cursor: cell;
+        }
+
+        /* --- CRT EFFECTS --- */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.3) 50%,
+                rgba(0,0,0,0.3)
+            );
+            background-size: 100% 3px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .crt-flicker {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 20, 0, 0.05);
+            opacity: 0;
+            z-index: 11;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+
+        .screen-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, rgba(0,255,65,0.05) 0%, rgba(0,0,0,0.6) 100%);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* --- COMPONENTS --- */
+        .retro-logo {
+            display: block;
+            margin: 0 auto 10px auto;
+            max-width: 140px;
+            width: 100%;
+            height: auto;
+            filter: drop-shadow(0 0 6px var(--term-glow));
+            image-rendering: pixelated; 
+        }
+
+        .ascii-art {
+            white-space: pre;
+            font-size: 7px;
+            line-height: 7px;
+            margin-bottom: 1rem;
+            color: var(--term-green);
+            font-weight: bold;
+            text-align: center;
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+        }
+
+        @media (min-width: 600px) {
+            .ascii-art { font-size: 10px; line-height: 10px; }
+            .retro-logo { max-width: 180px; }
+        }
+        @media (min-width: 900px) {
+            .ascii-art { font-size: 14px; line-height: 14px; }
+        }
+
+        .output-log {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            padding-right: 10px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--term-dim) var(--bg-color);
+            border-top: 1px solid var(--term-dim);
+            padding-top: 1rem;
+        }
+
+        .output-log p { margin: 5px 0; }
+        
+        .sys-msg { color: var(--term-dim); }
+        .highlight { color: #fff; text-shadow: 0 0 8px #fff; }
+        .error { color: var(--err-red); text-shadow: 0 0 5px red; }
+
+        .input-line {
+            display: flex;
+            align-items: center;
+            border-top: 1px solid var(--term-dim);
+            padding-top: 15px;
+            background: var(--bg-color);
+        }
+
+        .prompt {
+            margin-right: 10px;
+            font-weight: bold;
+            color: var(--term-green);
+        }
+
+        input[type="text"] {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            flex-grow: 1;
+            outline: none;
+            text-shadow: 0 0 5px var(--term-glow);
+            text-transform: lowercase;
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes flicker {
+            0% { opacity: 0.03; }
+            5% { opacity: 0.08; }
+            10% { opacity: 0.03; }
+            100% { opacity: 0.03; }
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 12px;
+            height: 1.4rem;
+            background-color: var(--term-green);
+            animation: blink 1s step-end infinite;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanlines"></div>
+    <div class="crt-flicker"></div>
+    <div class="screen-glow"></div>
+
+    <div id="terminal">
+        <img src="image_3.png" alt="Gammagoblin 16-bit Dog Logo" class="retro-logo">
+        
+        <div class="ascii-art">
+______ _______ _______ _______ _______ ______  _______ ______   _        _____  __   _
+  |  ____ |_____| |  |  | |  |  | |_____| |  ____ |     | |_____] |          |   | \  |
+  |_____| |     | |  |  | |  |  | |     | |_____| |_____| |_____] |_____   __|__ |  \_|
+        </div>
+
+        <div class="output-log" id="output"></div>
+
+        <div class="input-line">
+            <span class="prompt">guest@gamma:~$</span>
+            <input type="text" id="commandInput" autofocus autocomplete="off" spellcheck="false" disabled>
+            <span class="cursor"></span>
+        </div>
+    </div>
+
+    <script>
+        const outputDiv = document.getElementById('output');
+        const inputField = document.getElementById('commandInput');
+        
+        // Define your server URL here (leave empty for relative paths if hosted together)
+        const SERVER_URL = ''; 
+
+        // Helper to display text on the terminal
+        function appendOutput(text, className = "") {
+            const line = document.createElement('div');
+            line.innerHTML = className === "error" ? `[!]: ${text}` : `> ${text}`;
+            if (className) line.classList.add(className);
+            outputDiv.appendChild(line);
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        // 1. Initial Handshake Sequence
+        async function initiateHandshake() {
+            appendOutput("Connecting to server...", "sys-msg");
+            
+            try {
+                // Attempt to reach the backend
+                const response = await fetch(`${SERVER_URL}/api/handshake`);
+                
+                if (!response.ok) {
+                    throw new Error("Server rejected connection.");
+                }
+
+                const data = await response.json();
+                
+                // Assuming the server returns JSON like: 
+                // { text: "Connection established.", className: "highlight" }
+                appendOutput("Handshake successful.", "sys-msg");
+                appendOutput(data.text || "Welcome to Gammagoblin.", data.className || "");
+                
+                // Enable input after connection
+                inputField.disabled = false;
+                inputField.focus();
+
+            } catch (error) {
+                appendOutput(`CONNECTION FAILED: ${error.message}`, "error");
+                appendOutput("Operating in offline mode. Commands will not be processed.", "sys-msg");
+            }
+        }
+
+        // 2. Sending Commands to the Server
+        async function sendCommandToServer(cmd) {
+            // Echo the user's command
+            const userLine = document.createElement('div');
+            userLine.innerHTML = `<span style="color:#fff">guest@gamma:~$</span> ${cmd}`;
+            outputDiv.appendChild(userLine);
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+
+            // Handle local terminal clears without hitting the server
+            if (cmd === 'clear') {
+                outputDiv.innerHTML = '';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: cmd })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Assuming the server returns JSON like:
+                // { text: "PGP KEY ID: 0xGAMMA42", className: "sys-msg" }
+                const respLine = document.createElement('div');
+                respLine.innerHTML = data.text;
+                if(data.className) respLine.classList.add(data.className);
+                
+                outputDiv.appendChild(respLine);
+
+            } catch (error) {
+                appendOutput(`Command failed to send: ${error.message}`, "error");
+            }
+
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+
+        // Event Listeners
+        inputField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const command = inputField.value.trim().toLowerCase();
+                if (command) {
+                    sendCommandToServer(command);
+                }
+                inputField.value = '';
+            }
+        });
+
+        document.addEventListener('click', () => {
+            if (!inputField.disabled) inputField.focus();
+        });
+
+        // Start sequence on load
+        window.onload = () => {
+            initiateHandshake();
+        };
+    </script>
+</body>
+</html>
